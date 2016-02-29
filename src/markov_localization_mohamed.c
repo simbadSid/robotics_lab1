@@ -15,21 +15,31 @@ float sensor_tab[nb_observation][nb_observation];
 int map_left[nb_state];
 int map_right[nb_state];
 
-
+void init_position(int position) {
 // if position == 0 then unknown initial position
 // otherwise the initial position is "position"
 // we store the initial position in previous_localization
-void init_position(int position)
-{
-	int current_state = 0;
-//	int current_state = 1;
 
-	if (position != 0) previous_localization[current_state] = position;
-	current_localization[current_state] = 1;
+	int current_state;
+	if(position > 0){
+		for (current_state = 0; current_state < nb_state ; current_state++) {
+			current_localization[current_state] = 0.0;
+			previous_localization[current_state] = 0.0;
+		}
+		current_localization[position-1] = 1.0;
+		previous_localization[position-1] = 1.0;
+	}
+	else{
+		  for(current_state = 0; current_state < nb_state; current_state++)
+		  {
+		    previous_localization[current_state] = 1.0/((float)nb_state);
+		    current_localization[current_state] = 0;
+		  }
+	}
+
 }// init_position
 
-float dynamic_model(int current_state, int previous_state, int action)
-{
+float dynamic_model(int current_state, int previous_state, int action) {
 //return the probability to reach the state "current_state" from the state "previous_state" performing the action "action": P(S(t+1) = current_state | S(t) = previous_state, A(t) = action)
 
 	int loop, loop2;
@@ -39,12 +49,12 @@ float dynamic_model(int current_state, int previous_state, int action)
 			dynamic_tab[loop][loop2] = 0;
 
 	//store a first sensor model: a perfect dynamic model
-	dynamic_tab[1][1] = 1;//P(S_t = s + 1 | S_(t-1) = s, A = 1 ) = 100%
+	//dynamic_tab[1][1] = 1;//P(S_t = s + 1 | S_(t-1) = s, A = 1 ) = 100%
 	
 	//store a second sensor model
-	//dynamic_tab[1][1] = 0.90;//P(S_t = s + 1 | S_(t-1) = s, A = 1 ) = 90%
-	//dynamic_tab[0][1] = 0.05;//P(S_t = s | S_(t-1) = s, A = 1 ) = 5%
-	//dynamic_tab[2][1] = 0.05;//P(S_t = s+2 | S_(t-1) = s, A = 1 ) = 5%
+	dynamic_tab[1][1] = 0.90;//P(S_t = s + 1 | S_(t-1) = s, A = 1 ) = 90%
+	dynamic_tab[0][1] = 0.05;//P(S_t = s | S_(t-1) = s, A = 1 ) = 5%
+	dynamic_tab[2][1] = 0.05;//P(S_t = s+2 | S_(t-1) = s, A = 1 ) = 5%
 
 	//store a third sensor model
 	//dynamic_tab[1][1] = 0.8;//P(S_t = s + 1 | S_(t-1) = s, A = 1 ) = 80%
@@ -55,23 +65,23 @@ float dynamic_model(int current_state, int previous_state, int action)
 
 }// dynamic_model
 
-float sensor_model(int observation, int current_state) {
+float sensor_model(int observationLeft, int observationRight, int current_state) {
 // return the probability to observe "observation" when we are located in the state "current_state": P(O(t) = observation | S(t) = current_state)
 
 	//store a first sensor model: a perfect sensor model
-	sensor_tab[door][door] = 1;
-	sensor_tab[wall][door] = 0;
-	sensor_tab[wall][wall] = 1;
-	sensor_tab[door][wall] = 0;
+	//sensor_tab[door][door] = 1;
+	//sensor_tab[wall][door] = 0;
+	//sensor_tab[wall][wall] = 1;
+	//sensor_tab[door][wall] = 0;
 
 	//store a second sensor model
-	//sensor_tab[door][door] = 0.8;
-	//sensor_tab[wall][door] = 0.2;
+	sensor_tab[door][door] = 0.8;
+	sensor_tab[wall][door] = 0.2;
 
 	//sensor_tab[wall][wall] = 0.7;
 	//sensor_tab[door][wall] = 0.3;
 	
-	return( sensor_tab[observation][map_left[current_state]] );
+	return(  sensor_tab[observationLeft][map_left[current_state]] * sensor_tab[observationRight][map_right[current_state]] );
 
 }// sensor_model
 
@@ -85,7 +95,7 @@ void store_map() {
 	// store the map
 	int loop;
 	for( loop = 0; loop < nb_state; loop++ )
-	{
+{
 		map_left[loop] = wall;
 		map_right[loop] = wall;
 	}
@@ -100,49 +110,35 @@ void store_map() {
 	map_right[9] = door;
 	map_right[11] = door;
 	map_right[17] = door;
+		
 }// store_map
 
-void prediction(int action)
-{
-	int res = 0;
-	int previousState, state;
-	float dynamicModel, previousEstimation;
+void prediction(int action) {
+	int current_state, previous_state;
 
-	//prediction
-	for (state=0; state<nb_state; state++)
-	{
-		res = 0;
-		current_localization[state] = 0;
-		for (previousState=0; previousState<nb_state; previousState++)
-		{
-			dynamicModel		= dynamic_model(state, previousState, action);
-			previousEstimation	= previous_localization[previousState];
-			current_localization[state] += dynamicModel * previousEstimation;
+	for (current_state = 0; current_state < nb_state; current_state++) {
+		current_localization[current_state] = 0.0;
+		for (previous_state = 0; previous_state < nb_state; previous_state++) {
+			current_localization[current_state] += dynamic_model(current_state, previous_state, action) * previous_localization[previous_state];
 		}
 	}
+}
 
-}// prediction
-
-void estimation(int observation)
-{
+void estimation(int observationLeft, int observationRight) {
 // we use the previous_localization to do the prediction
 // and store the results in the current_localization
 
-//	int current_state, predic, probObs;
-
-//	prediction(1);
-
+	int current_state;
+	
+	for(current_state = 0; current_state < nb_state; current_state++)
+	{
+	  current_localization[current_state] = sensor_model(observationLeft, observationRight, current_state) * current_localization[current_state];
+	}
 	//estimation: confrontation between prediction and observation
-//	for (current_state=0; current_state<nb_state; current_state++)
-//	{
-//		probObs= sensor_model(observation, current_state);
-//		previous_localization[current_state] = current_localization[current_state] * probObs;
-//	}
 
 }// estimation
 
-void normalization()
-{
+void normalization() {
 // we normalize current_localization
 // and copy it in previous_localization for the next step
 
@@ -150,15 +146,19 @@ void normalization()
 
 	//normalization
 	float norm = 0;
-	for (current_state=0; current_state<nb_state; current_state++)
-	{
+	for (current_state = 0; current_state < nb_state; current_state++) {
 		norm += current_localization[current_state];
 	}
-	for (current_state=0; current_state<nb_state; current_state++)
-	{
-		previous_localization[current_state] = current_localization[current_state] / norm;
+
+	for (current_state = 0; current_state < nb_state; current_state++) {
+if(norm >0)
+		current_localization[current_state] /= norm;
 	}
+      
 	//copy of current_localization in previous_localization
+	for (current_state = 0; current_state < nb_state; current_state++) {
+		previous_localization[current_state] = current_localization[current_state];
+	}
 
 }//normalization
 
@@ -169,11 +169,11 @@ void display() {
 	float sum = 0;
 
 	for( current_state = 0; current_state < nb_state; current_state++ )
-	{
+{
 		printf("P(S_t = %d) = %f\n", current_state+1, current_localization[current_state]);
 		sum += current_localization[current_state];
 	}
-	printf("somme = %f\n");
+	printf("somme = %f\n",sum);
 	printf("\n");
 
 }// display
@@ -181,49 +181,50 @@ void display() {
 //****************************************************
 // main
 //****************************************************
-int main(int argc, char* argv[])
-{
+
+int main(int argc, char* argv[]) {
+
 	store_map();
-	init_position(1);
+	init_position(0);
 	display();
 
 	printf("prediction\n");
 	prediction(1);// we move from one meter to the right
-	/*display();
+	display();
 	printf("estimation\n");
-	estimation(wall);*/
+	estimation(wall,wall);
 	normalization();
 	display();
 	  
 	printf("prediction\n");
 	prediction(1);// we move from one meter to the right
-	/*display();
+	display();
 	printf("estimation\n");
-	estimation(wall);*/
+	estimation(wall,wall);
 	normalization();
 	display();
 	
 	printf("prediction\n");
 	prediction(1);// we move from one meter to the right
-	/*display();
+	display();
 	printf("estimation\n");
-	estimation(wall);*/
+	estimation(wall,wall);
 	normalization();
 	display();
 	
 	printf("prediction\n");
 	prediction(1);// we move from one meter to the right
-	/*display();
+	display();
 	printf("estimation\n");
-	estimation(wall);*/
+	estimation(wall,wall);
 	normalization();
 	display();
 	
 	printf("prediction\n");
 	prediction(1);// we move from one meter to the right
-	/*display();
+	display();
 	printf("estimation\n");
-	estimation(wall);*/
+	estimation(wall,wall);
 	normalization();
 	display();
 	
